@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#111111" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./rotary-calendar.svg" />
+    <link rel="apple-touch-icon" href="./rotary-calendar.svg" />
+    <title>Rotary Calendar</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main id="stage">
+      <div id="wheel">
+        <img id="calendar" src="./rotary-calendar.svg" alt="Rotary Calendar" draggable="false" />
+      </div>
+    </main>
+    <button id="enable" hidden>Tap to enable motion</button>
+    <div id="readout" aria-hidden="true">—</div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
