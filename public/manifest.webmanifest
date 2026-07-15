@@ -1,0 +1,19 @@
+{
+  "name": "Rotary Calendar",
+  "short_name": "Rotary",
+  "description": "A gestural rotary calendar proof of concept.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": [
+    {
+      "src": "./rotary-calendar.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
