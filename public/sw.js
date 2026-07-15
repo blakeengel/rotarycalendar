@@ -1,4 +1,4 @@
-const CACHE = 'rotary-calendar-v10';
+const CACHE = 'rotary-calendar-v11';
 const ASSETS = ['./', './index.html', './rotary-calendar.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -15,10 +15,18 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first with cache fallback. Users on-line always get the current
+// deploy; cache is only used when the network is unavailable. This avoids
+// the classic "stale cached HTML references dead JS chunk" trap.
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
+  if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).catch(() => cached))
+    fetch(event.request)
+      .then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE).then((c) => c.put(event.request, clone)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

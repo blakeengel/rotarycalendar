@@ -24,8 +24,8 @@ html, body {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  filter: blur(24px);
-  opacity: 0.35;
+  filter: blur(12px);
+  opacity: 0.55;
   transition: filter 600ms ease, opacity 600ms ease;
 }
 

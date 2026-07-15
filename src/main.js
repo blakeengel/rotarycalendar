@@ -128,37 +128,44 @@ function onMotion(event) {
   }
 }
 
-async function requestMotionPermission() {
-  if (
-    typeof DeviceMotionEvent !== 'undefined' &&
-    typeof DeviceMotionEvent.requestPermission === 'function'
-  ) {
-    return DeviceMotionEvent.requestPermission();
-  }
-  return 'granted';
-}
-
-async function activate() {
+// The DeviceMotionEvent.requestPermission call MUST happen synchronously
+// inside the click handler on iOS Safari — any await before it drops the
+// user-gesture context and the prompt silently fails.
+function activate() {
+  if (activateBtn.disabled) return;
   activateBtn.disabled = true;
   landingMsg.textContent = '';
-  try {
-    const state = await requestMotionPermission();
-    if (state !== 'granted') {
-      landingMsg.textContent = 'Motion permission denied. Enable Motion & Orientation in Safari settings and reload.';
+
+  const needsPrompt =
+    typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission === 'function';
+  const permissionPromise = needsPrompt
+    ? DeviceMotionEvent.requestPermission()
+    : Promise.resolve('granted');
+
+  // Guard against the prompt hanging so a stuck permission call doesn't
+  // leave the button permanently disabled.
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('permission timed out')), 8000)
+  );
+
+  Promise.race([permissionPromise, timeout])
+    .then((state) => {
+      if (state !== 'granted') {
+        landingMsg.textContent = 'Motion permission denied. Enable Motion & Orientation in Safari settings and reload.';
+        activateBtn.disabled = false;
+        return;
+      }
+      motionWarmupUntil = performance.now() + WARMUP_MS;
+      window.addEventListener('devicemotion', onMotion);
+      document.body.classList.add('active');
+      readout.hidden = false;
+      scheduleFrame();
+    })
+    .catch((err) => {
+      landingMsg.textContent = `Error: ${err.message || err}. Tap to retry.`;
       activateBtn.disabled = false;
-      return;
-    }
-
-    motionWarmupUntil = performance.now() + WARMUP_MS;
-    window.addEventListener('devicemotion', onMotion);
-
-    document.body.classList.add('active');
-    readout.hidden = false;
-    scheduleFrame();
-  } catch (err) {
-    landingMsg.textContent = `Error: ${err.message || err}`;
-    activateBtn.disabled = false;
-  }
+    });
 }
 
 activateBtn.addEventListener('click', activate);
