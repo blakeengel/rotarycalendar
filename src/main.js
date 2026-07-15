@@ -1,7 +1,5 @@
-const landing = document.getElementById('landing');
 const activateBtn = document.getElementById('activate');
 const landingMsg = document.getElementById('landing-msg');
-const stage = document.getElementById('stage');
 const wheel = document.getElementById('wheel');
 const readout = document.getElementById('readout');
 
@@ -96,8 +94,7 @@ async function activate() {
     if (orientOk) window.addEventListener('deviceorientation', onOrientation);
     if (motionOk) window.addEventListener('devicemotion', onMotion);
 
-    landing.hidden = true;
-    stage.hidden = false;
+    document.body.classList.add('active');
     readout.hidden = false;
   } catch (err) {
     landingMsg.textContent = `Error: ${err.message || err}`;

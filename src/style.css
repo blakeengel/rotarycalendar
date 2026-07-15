@@ -19,48 +19,21 @@ html, body {
   overscroll-behavior: none;
 }
 
-#landing {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  gap: 16px;
-  padding: 24px;
-  text-align: center;
-}
-
-#activate {
-  padding: 18px 28px;
-  border: 1px solid #3a3a3a;
-  background: #1a1a1a;
-  color: var(--fg);
-  border-radius: 999px;
-  font: inherit;
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  min-width: 240px;
-  transition: background 120ms ease;
-}
-
-#activate:hover:not(:disabled) { background: #232323; }
-#activate:active:not(:disabled) { background: #2a2a2a; }
-#activate:disabled { opacity: 0.5; cursor: default; }
-
-#landing-msg {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.7;
-  max-width: 320px;
-  min-height: 1.2em;
-}
-
 #stage {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
+  z-index: 1;
+  pointer-events: none;
+  filter: blur(24px);
+  opacity: 0.35;
+  transition: filter 600ms ease, opacity 600ms ease;
+}
+
+body.active #stage {
+  filter: blur(0);
+  opacity: 1;
 }
 
 #wheel {
@@ -80,6 +53,59 @@ html, body {
   pointer-events: none;
 }
 
+#landing {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  opacity: 1;
+  transition: opacity 500ms ease;
+}
+
+body.active #landing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#activate {
+  padding: 18px 28px;
+  border: 1px solid #3a3a3a;
+  background: rgba(20, 20, 20, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: var(--fg);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  min-width: 240px;
+  transition: background 120ms ease;
+}
+
+#activate:hover:not(:disabled) { background: rgba(30, 30, 30, 0.8); }
+#activate:active:not(:disabled) { background: rgba(40, 40, 40, 0.85); }
+#activate:disabled { opacity: 0.5; cursor: default; }
+
+#landing-msg {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(48px, env(safe-area-inset-bottom));
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+  max-width: 320px;
+}
+
+#landing-msg:empty { display: none; }
+
 #readout {
   position: fixed;
   top: max(12px, env(safe-area-inset-top));
@@ -93,4 +119,5 @@ html, body {
   opacity: 0.6;
   pointer-events: none;
   white-space: nowrap;
+  z-index: 3;
 }
