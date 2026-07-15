@@ -47,10 +47,10 @@ body.active #anchor {
 }
 
 #wheel {
-  width: min(92vmin, 92vmin);
+  width: 140vmin;
   aspect-ratio: 1 / 1;
   will-change: transform;
-  transform: rotate(0deg) scale(1);
+  transform: rotate(0deg);
   transform-origin: 50% 50%;
 }
 

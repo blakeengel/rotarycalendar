@@ -3,8 +3,22 @@ const landingMsg = document.getElementById('landing-msg');
 const wheel = document.getElementById('wheel');
 const readout = document.getElementById('readout');
 
-let targetRotationDeg = 0;
-let currentRotationDeg = 0;
+// SVG day-lines start at 6 o'clock (rotate 0 = pointing down) and advance
+// clockwise through the year. So today's day-line sits at (180° + yearFraction
+// * 360°) measured clockwise from screen top. Rotating the wheel by the
+// negative of that angle brings today to the top.
+function initialDayRotationDeg() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year + 1, 0, 1);
+  const yearFraction = (now - yearStart) / (yearEnd - yearStart);
+  const angleFromTop = (180 + yearFraction * 360) % 360;
+  return -angleFromTop;
+}
+
+let targetRotationDeg = initialDayRotationDeg();
+let currentRotationDeg = targetRotationDeg;
 
 let frameQueued = false;
 let motionWarmupUntil = 0;
@@ -149,6 +163,10 @@ async function activate() {
 }
 
 activateBtn.addEventListener('click', activate);
+
+// Apply the initial rotation immediately so today's day sits at the top even
+// in the landing state, behind the blur.
+scheduleFrame();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

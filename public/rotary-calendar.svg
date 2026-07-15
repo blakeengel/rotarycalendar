@@ -54,8 +54,8 @@
       .month-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: bold; fill: #eeeeee; letter-spacing: 2px; }
       .day-num { display: none; }
       .cum-day-num { display: none; }
-      .wedge-even { fill: #223a5c; }
-      .wedge-odd  { fill: #5c3a22; }
+      .wedge-even { fill: #1a1a1a; }
+      .wedge-odd  { fill: #363636; }
     </style>
     <path
        id="text-path"
