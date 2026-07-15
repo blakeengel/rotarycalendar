@@ -29,7 +29,7 @@ const WARMUP_MS = 900;
 
 const ROLL_RATE_THRESHOLD = 90;
 const HYSTERESIS = 0.35;
-const RESET_WINDOW_MS = 1000;
+const RESET_WINDOW_MS = 800;
 
 function scheduleFrame() {
   if (!frameQueued) {
@@ -101,8 +101,7 @@ class FlickDetector {
     const isReset =
       this.prevDir !== 0 &&
       flick.dir === -this.prevDir &&
-      dtSince < RESET_WINDOW_MS &&
-      flick.peak < this.prevPeak;
+      dtSince < RESET_WINDOW_MS;
 
     if (isReset) return 0;
 
