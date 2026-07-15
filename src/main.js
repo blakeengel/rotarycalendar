@@ -165,10 +165,11 @@ function onMotion(event) {
     }
   }
 
-  // +z points out of the screen toward the user; a jerk toward the face
-  // reads positive → zoom in, a pull away reads negative → zoom out.
+  // Spec says +z points out of the screen toward the user, but iOS Safari
+  // reports the opposite sign (verified on hardware: a push toward the face
+  // read negative). Negate so toward-face → positive → zoom in.
   if (acc && acc.z != null) {
-    const zCentered = acc.z - zBaseline;
+    const zCentered = -(acc.z - zBaseline);
     const d = zoomFlick.update(zCentered, now);
     if (d !== 0) {
       zoomLevel = clamp(zoomLevel + d, ZOOM_MIN_LEVEL, ZOOM_MAX_LEVEL);
