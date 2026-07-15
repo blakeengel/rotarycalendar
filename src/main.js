@@ -20,6 +20,10 @@ function initialDayRotationDeg() {
 let targetRotationDeg = initialDayRotationDeg();
 let currentRotationDeg = targetRotationDeg;
 
+let zoomLevel = 0;
+let targetScale = 1;
+let currentScale = 1;
+
 let frameQueued = false;
 let motionWarmupUntil = 0;
 
@@ -27,9 +31,18 @@ const ROTATION_STEP_DEG = 30;
 const LERP = 0.18;
 const WARMUP_MS = 900;
 
-const ROLL_RATE_THRESHOLD = 90;
+const ROLL_RATE_THRESHOLD = 90;    // deg/s
+const Z_ACCEL_THRESHOLD = 2.5;     // m/s²
 const HYSTERESIS = 0.35;
 const RESET_WINDOW_MS = 800;
+
+const ZOOM_FACTOR = 1.5;
+const ZOOM_MIN_LEVEL = -3;
+const ZOOM_MAX_LEVEL = 5;
+
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
 
 function scheduleFrame() {
   if (!frameQueued) {
@@ -41,9 +54,18 @@ function scheduleFrame() {
 function applyFrame() {
   frameQueued = false;
   currentRotationDeg += (targetRotationDeg - currentRotationDeg) * LERP;
-  wheel.style.transform = `rotate(${currentRotationDeg.toFixed(2)}deg)`;
-  readout.textContent = `θ ${targetRotationDeg.toFixed(0)}°  (${currentRotationDeg.toFixed(1)}°)`;
-  if (Math.abs(targetRotationDeg - currentRotationDeg) > 0.05) {
+  currentScale += (targetScale - currentScale) * LERP;
+  // scale first, rotate second — both pivot on the wheel's own center
+  // (transform-origin: 50% 50%), which is the anchor point, so the pivot
+  // never moves regardless of scale or rotation.
+  wheel.style.transform =
+    `scale(${currentScale.toFixed(3)}) rotate(${currentRotationDeg.toFixed(2)}deg)`;
+  readout.textContent =
+    `θ ${targetRotationDeg.toFixed(0)}°  ×${currentScale.toFixed(2)}  z${zoomLevel}`;
+  if (
+    Math.abs(targetRotationDeg - currentRotationDeg) > 0.05 ||
+    Math.abs(targetScale - currentScale) > 0.005
+  ) {
     scheduleFrame();
   }
 }
@@ -113,6 +135,7 @@ class FlickDetector {
 }
 
 const rollFlick = new FlickDetector(ROLL_RATE_THRESHOLD);
+const zoomFlick = new FlickDetector(Z_ACCEL_THRESHOLD);
 
 function onMotion(event) {
   const now = performance.now();
@@ -123,6 +146,20 @@ function onMotion(event) {
     const d = rollFlick.update(rr.gamma, now);
     if (d !== 0) {
       targetRotationDeg += d * ROTATION_STEP_DEG;
+      scheduleFrame();
+    }
+  }
+
+  // Linear acceleration (gravity-removed) along the device's z axis.
+  // +z points out of the screen toward the user; a jerk toward the face
+  // therefore reads positive → zoom in, and a pull away reads negative →
+  // zoom out.
+  const acc = event.acceleration;
+  if (acc && acc.z != null) {
+    const d = zoomFlick.update(acc.z, now);
+    if (d !== 0) {
+      zoomLevel = clamp(zoomLevel + d, ZOOM_MIN_LEVEL, ZOOM_MAX_LEVEL);
+      targetScale = Math.pow(ZOOM_FACTOR, zoomLevel);
       scheduleFrame();
     }
   }
