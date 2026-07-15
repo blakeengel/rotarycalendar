@@ -15,9 +15,9 @@ const DEAD_Z = 0.10;
 const VEL_DAMP = 0.85;
 const POS_DAMP = 0.99;
 const POS_LIMIT = 0.5;
-const SCALE_GAIN = 20;
+const SCALE_GAIN = 200;
 const SCALE_MIN = 0.3;
-const SCALE_MAX = 8.0;
+const SCALE_MAX = 80.0;
 const HIGH_PASS = 0.05;
 
 function clamp(v, lo, hi) {
