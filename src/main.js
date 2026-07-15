@@ -40,6 +40,11 @@ const ZOOM_FACTOR = 1.5;
 const ZOOM_MIN_LEVEL = -3;
 const ZOOM_MAX_LEVEL = 5;
 
+const Z_BASELINE_LERP = 0.05;                        // ~200ms convergence in idle
+const Z_IDLE_LIMIT = Z_ACCEL_THRESHOLD * 0.5;        // only update baseline in idle
+
+let zBaseline = 0;
+
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
@@ -139,6 +144,16 @@ const zoomFlick = new FlickDetector(Z_ACCEL_THRESHOLD);
 
 function onMotion(event) {
   const now = performance.now();
+
+  // Track the z-accel baseline continuously (even during warmup) so any DC
+  // bias present at page load is estimated before we start detecting flicks.
+  // Only update inside the idle band so real flick peaks don't drag the
+  // baseline toward the direction the user just flicked.
+  const acc = event.acceleration;
+  if (acc && acc.z != null && Math.abs(acc.z) < Z_IDLE_LIMIT) {
+    zBaseline += (acc.z - zBaseline) * Z_BASELINE_LERP;
+  }
+
   if (now < motionWarmupUntil) return;
 
   const rr = event.rotationRate;
@@ -150,13 +165,11 @@ function onMotion(event) {
     }
   }
 
-  // Linear acceleration (gravity-removed) along the device's z axis.
   // +z points out of the screen toward the user; a jerk toward the face
-  // therefore reads positive → zoom in, and a pull away reads negative →
-  // zoom out.
-  const acc = event.acceleration;
+  // reads positive → zoom in, a pull away reads negative → zoom out.
   if (acc && acc.z != null) {
-    const d = zoomFlick.update(acc.z, now);
+    const zCentered = acc.z - zBaseline;
+    const d = zoomFlick.update(zCentered, now);
     if (d !== 0) {
       zoomLevel = clamp(zoomLevel + d, ZOOM_MIN_LEVEL, ZOOM_MAX_LEVEL);
       targetScale = Math.pow(ZOOM_FACTOR, zoomLevel);
