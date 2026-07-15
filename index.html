@@ -11,13 +11,16 @@
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
-    <main id="stage">
+    <div id="landing">
+      <button id="activate" type="button">Activate Time Motion</button>
+      <p id="landing-msg" role="status"></p>
+    </div>
+    <main id="stage" hidden>
       <div id="wheel">
         <img id="calendar" src="./rotary-calendar.svg" alt="Rotary Calendar" draggable="false" />
       </div>
     </main>
-    <button id="enable" hidden>Tap to enable motion</button>
-    <div id="readout" aria-hidden="true">—</div>
+    <div id="readout" aria-hidden="true" hidden></div>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

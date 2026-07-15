@@ -19,6 +19,43 @@ html, body {
   overscroll-behavior: none;
 }
 
+#landing {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+#activate {
+  padding: 18px 28px;
+  border: 1px solid #3a3a3a;
+  background: #1a1a1a;
+  color: var(--fg);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  min-width: 240px;
+  transition: background 120ms ease;
+}
+
+#activate:hover:not(:disabled) { background: #232323; }
+#activate:active:not(:disabled) { background: #2a2a2a; }
+#activate:disabled { opacity: 0.5; cursor: default; }
+
+#landing-msg {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+  max-width: 320px;
+  min-height: 1.2em;
+}
+
 #stage {
   position: fixed;
   inset: 0;
@@ -30,8 +67,8 @@ html, body {
   width: min(92vmin, 92vmin);
   aspect-ratio: 1 / 1;
   will-change: transform;
-  transform: rotate(0deg);
-  transition: transform 60ms linear;
+  transform: rotate(0deg) scale(1);
+  transform-origin: 50% 50%;
 }
 
 #calendar {
@@ -43,33 +80,17 @@ html, body {
   pointer-events: none;
 }
 
-#enable {
-  position: fixed;
-  left: 50%;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  padding: 14px 22px;
-  border: 1px solid #444;
-  background: #1c1c1c;
-  color: var(--fg);
-  border-radius: 999px;
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-#enable:active { background: #2a2a2a; }
-
 #readout {
   position: fixed;
   top: max(12px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 12px;
   padding: 4px 10px;
   background: rgba(0, 0, 0, 0.35);
   border-radius: 6px;
-  opacity: 0.7;
+  opacity: 0.6;
   pointer-events: none;
+  white-space: nowrap;
 }
