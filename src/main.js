@@ -24,6 +24,12 @@ let zoomLevel = 0;
 let targetScale = 1;
 let currentScale = 1;
 
+// Radial pan in screen px. 0 = calendar center exactly on the anchor point.
+// Positive pushes the wheel down, bringing outer rings into the viewport.
+// Only ever nonzero when zoomed in enough that the slice overflows the screen.
+let targetPan = 0;
+let currentPan = 0;
+
 let frameQueued = false;
 let motionWarmupUntil = 0;
 
@@ -32,6 +38,7 @@ const LERP = 0.18;
 const WARMUP_MS = 900;
 
 const ROLL_RATE_THRESHOLD = 90;    // deg/s
+const PITCH_RATE_THRESHOLD = 90;   // deg/s
 const Z_ACCEL_THRESHOLD = 2.5;     // m/s²
 const HYSTERESIS = 0.35;
 const RESET_WINDOW_MS = 800;
@@ -46,6 +53,26 @@ const Z_BASELINE_LERP = 0.05;                        // ~200ms convergence in id
 const Z_IDLE_LIMIT = Z_ACCEL_THRESHOLD * 0.5;        // only update baseline in idle
 
 let zBaseline = 0;
+
+// Orbit-ring spacing in the SVG's user units (concentric circles are ~17.85
+// apart on a 1200-unit viewBox); converted to px at the current scale to step
+// exactly one ring per tilt flick.
+const RING_SPACING_SVG = 17.85;
+const SVG_SIZE = 1200;
+const CROSS_SUPPRESS_MS = 500;
+
+function anchorToTopPx() {
+  return window.innerHeight * 0.95;
+}
+
+function panMaxFor(scale) {
+  const wheelHalf = (wheel.offsetWidth / 2) * scale;
+  return Math.max(0, wheelHalf - anchorToTopPx());
+}
+
+function ringStepPx(scale) {
+  return (RING_SPACING_SVG / SVG_SIZE) * wheel.offsetWidth * scale;
+}
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
@@ -62,16 +89,21 @@ function applyFrame() {
   frameQueued = false;
   currentRotationDeg += (targetRotationDeg - currentRotationDeg) * LERP;
   currentScale += (targetScale - currentScale) * LERP;
-  // scale first, rotate second — both pivot on the wheel's own center
-  // (transform-origin: 50% 50%), which is the anchor point, so the pivot
-  // never moves regardless of scale or rotation.
+  currentPan += (targetPan - currentPan) * LERP;
+  // Transforms apply right-to-left: rotate and scale both pivot on the
+  // wheel's own center, then the pan translates that center straight down
+  // in screen space. Pan is 0 unless traversing rings while zoomed in.
   wheel.style.transform =
-    `scale(${currentScale.toFixed(3)}) rotate(${currentRotationDeg.toFixed(2)}deg)`;
+    `translate(0, ${currentPan.toFixed(1)}px)` +
+    ` scale(${currentScale.toFixed(3)})` +
+    ` rotate(${currentRotationDeg.toFixed(2)}deg)`;
   readout.textContent =
-    `θ ${targetRotationDeg.toFixed(0)}°  ×${currentScale.toFixed(2)}  z${zoomLevel}`;
+    `θ ${targetRotationDeg.toFixed(0)}°  ×${currentScale.toFixed(2)}  z${zoomLevel}` +
+    `  f ${Math.round(targetPan)}/${Math.round(panMaxFor(targetScale))}`;
   if (
     Math.abs(targetRotationDeg - currentRotationDeg) > 0.05 ||
-    Math.abs(targetScale - currentScale) > 0.005
+    Math.abs(targetScale - currentScale) > 0.005 ||
+    Math.abs(targetPan - currentPan) > 0.5
   ) {
     scheduleFrame();
   }
@@ -153,10 +185,26 @@ class FlickDetector {
     this.prevEndTs = flick.ts;
     return flick.dir;
   }
+
+  suppress(until) {
+    this.settleUntil = Math.max(this.settleUntil, until);
+  }
 }
 
 const rollFlick = new FlickDetector(ROLL_RATE_THRESHOLD);
 const zoomFlick = new FlickDetector(Z_ACCEL_THRESHOLD);
+const pitchFlick = new FlickDetector(PITCH_RATE_THRESHOLD);
+
+const allFlicks = [rollFlick, zoomFlick, pitchFlick];
+
+// One physical gesture bleeds into other sensor axes (a tilt drags some
+// z-accel with it, a lunge wobbles the gyro). Whichever detector commits
+// first wins the gesture; the others sit out briefly.
+function suppressOthers(committed, now) {
+  for (const f of allFlicks) {
+    if (f !== committed) f.suppress(now + CROSS_SUPPRESS_MS);
+  }
+}
 
 function onMotion(event) {
   const now = performance.now();
@@ -177,6 +225,7 @@ function onMotion(event) {
     const d = rollFlick.update(rr.gamma, now);
     if (d !== 0) {
       targetRotationDeg += d * ROTATION_STEP_DEG;
+      suppressOthers(rollFlick, now);
       scheduleFrame();
     }
   }
@@ -190,6 +239,30 @@ function onMotion(event) {
     if (d !== 0) {
       zoomLevel = clamp(zoomLevel + d, ZOOM_MIN_LEVEL, ZOOM_MAX_LEVEL);
       targetScale = Math.pow(ZOOM_FACTOR, zoomLevel);
+      // Rescale the pan so the ring band in view stays put, then re-clamp —
+      // zooming out shrinks the traversable range and can pull the pan in.
+      targetPan = clamp(targetPan * Math.pow(ZOOM_FACTOR, d), 0, panMaxFor(targetScale));
+      suppressOthers(zoomFlick, now);
+      scheduleFrame();
+    }
+  }
+
+  // Pitch rate → ring traversal. Per spec, tipping the top of the device
+  // toward the user reads positive beta; the brief maps tilt-toward-face to
+  // outward (pan grows), tilt-away to inward. Sign unverified on hardware.
+  if (rr && rr.beta != null) {
+    const d = pitchFlick.update(rr.beta, now);
+    if (d !== 0) {
+      const panMax = panMaxFor(targetScale);
+      const next = clamp(targetPan + d * ringStepPx(targetScale), 0, panMax);
+      if (next === targetPan) {
+        // Whole slice already visible, or at the end of the range — bounce:
+        // kick the visible pan and let the lerp spring it back to target.
+        currentPan += d * Math.min(64, anchorToTopPx() * 0.08);
+      } else {
+        targetPan = next;
+      }
+      suppressOthers(pitchFlick, now);
       scheduleFrame();
     }
   }

@@ -1,4 +1,4 @@
-const CACHE = 'rotary-calendar-v16';
+const CACHE = 'rotary-calendar-v17';
 const ASSETS = ['./', './index.html', './rotary-calendar.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
