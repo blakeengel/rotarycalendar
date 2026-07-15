@@ -60,6 +60,9 @@ let zBaseline = 0;
 const RING_SPACING_SVG = 17.85;
 const SVG_SIZE = 1200;
 const CROSS_SUPPRESS_MS = 500;
+const TOUCH_SUPPRESS_MS = 500;
+const SCALE_MIN = Math.pow(ZOOM_FACTOR, ZOOM_MIN_LEVEL);
+const SCALE_MAX = Math.pow(ZOOM_FACTOR, ZOOM_MAX_LEVEL);
 
 function anchorToTopPx() {
   return window.innerHeight * 0.95;
@@ -209,6 +212,10 @@ function suppressOthers(committed, now) {
 function onMotion(event) {
   const now = performance.now();
 
+  // Touch owns the calendar while any finger is down — dragging physically
+  // moves the phone and would trip every flick detector.
+  if (pointers.size > 0) return;
+
   // Track the z-accel baseline continuously (even during warmup) so any DC
   // bias present at page load is estimated before we start detecting flicks.
   // Only update inside the idle band so real flick peaks don't drag the
@@ -307,6 +314,74 @@ function activate() {
       activateBtn.disabled = false;
     });
 }
+
+// ---- Touch gestures: one finger drags (dx → rotate, dy → traverse rings),
+// two fingers pinch (→ zoom). Pointer events cover mouse drags for free.
+
+const pointers = new Map();
+let pinchStartDist = 0;
+let pinchStartScale = 1;
+let pinchStartPan = 0;
+
+function initPinch() {
+  const [a, b] = [...pointers.values()];
+  pinchStartDist = Math.hypot(a.x - b.x, a.y - b.y);
+  pinchStartScale = targetScale;
+  pinchStartPan = targetPan;
+}
+
+function onPointerDown(e) {
+  if (!document.body.classList.contains('active')) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) initPinch();
+}
+
+function onPointerMove(e) {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const dx = e.clientX - p.x;
+  const dy = e.clientY - p.y;
+  p.x = e.clientX;
+  p.y = e.clientY;
+
+  if (pointers.size === 1) {
+    // Rim-drag feel: most interaction happens near the top of the visible
+    // dial, ~anchorToTop px from the wheel center, so dx over that distance
+    // approximates dragging the rim 1:1.
+    targetRotationDeg += (dx / anchorToTopPx()) * (180 / Math.PI);
+    targetPan = clamp(targetPan + dy, 0, panMaxFor(targetScale));
+    scheduleFrame();
+  } else if (pointers.size === 2 && pinchStartDist > 0) {
+    const [a, b] = [...pointers.values()];
+    const ratio = Math.hypot(a.x - b.x, a.y - b.y) / pinchStartDist;
+    targetScale = clamp(pinchStartScale * ratio, SCALE_MIN, SCALE_MAX);
+    // Keep the discrete zoom level in step so a later motion flick continues
+    // from where the pinch left off.
+    zoomLevel = clamp(
+      Math.round(Math.log(targetScale) / Math.log(ZOOM_FACTOR)),
+      ZOOM_MIN_LEVEL,
+      ZOOM_MAX_LEVEL
+    );
+    targetPan = clamp(pinchStartPan * ratio, 0, panMaxFor(targetScale));
+    scheduleFrame();
+  }
+}
+
+function onPointerEnd(e) {
+  if (!pointers.delete(e.pointerId)) return;
+  if (pointers.size === 2) initPinch();
+  else pinchStartDist = 0;
+  if (pointers.size === 0) {
+    // Lifting fingers jolts the phone — don't let it read as a flick.
+    const until = performance.now() + TOUCH_SUPPRESS_MS;
+    for (const f of allFlicks) f.suppress(until);
+  }
+}
+
+window.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup', onPointerEnd);
+window.addEventListener('pointercancel', onPointerEnd);
 
 activateBtn.addEventListener('click', activate);
 
