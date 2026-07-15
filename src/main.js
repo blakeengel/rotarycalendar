@@ -3,104 +3,218 @@ const landingMsg = document.getElementById('landing-msg');
 const wheel = document.getElementById('wheel');
 const readout = document.getElementById('readout');
 
-let gamma = 0;
-let zoomVel = 0;
-let zoomPos = 0;
-let zLowPass = 0;
-let lastAz = 0;
-let lastMotionTs = 0;
-let frameQueued = false;
+// Target state — advanced discretely by flicks.
+let targetRotationDeg = 0;
+let zoomLevel = 0;
+let focalLevel = 0;
 
-const DEAD_Z = 0.10;
-const VEL_DAMP = 0.85;
-const POS_DAMP = 0.99;
-const POS_LIMIT = 0.5;
-const SCALE_GAIN = 200;
-const SCALE_MIN = 0.3;
-const SCALE_MAX = 80.0;
-const HIGH_PASS = 0.05;
+// Interpolated visible state — lerps toward target every frame.
+let currentRotationDeg = 0;
+let currentScale = 1;
+let currentFocalPct = 0;
+
+let frameQueued = false;
+let motionWarmupUntil = 0;
+
+const ROTATION_STEP_DEG = 30;      // one month per flick
+const ZOOM_FACTOR = 1.5;
+const ZOOM_MIN_LEVEL = -3;
+const ZOOM_MAX_LEVEL = 8;
+const FOCAL_STEP_PCT = 3.75;       // shifts calendar ~4% of its box per flick
+const FOCAL_MIN_LEVEL = -2;
+const FOCAL_MAX_LEVEL = 10;
+const LERP = 0.18;                 // fraction of remaining gap closed per frame
+const WARMUP_MS = 900;             // ignore sensor input during landing → active transition
+
+// Flick detection thresholds — chosen high enough to reject hand tremor.
+const ROLL_RATE_THRESHOLD = 90;    // deg/s around device Y (roll)
+const PITCH_RATE_THRESHOLD = 90;   // deg/s around device X (pitch)
+const Z_ACCEL_THRESHOLD = 2.2;     // m/s² along device Z (toward/away from face)
+const HYSTERESIS = 0.35;           // motion segment ends only when |signal| < threshold * HYSTERESIS
+
+const RESET_WINDOW_MS = 1000;
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-function applyFrame() {
-  frameQueued = false;
-  const scale = clamp(1 + zoomPos * SCALE_GAIN, SCALE_MIN, SCALE_MAX);
-  wheel.style.transform = `rotate(${gamma.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-  readout.textContent = `γ ${gamma.toFixed(1)}°  az ${lastAz.toFixed(2)}  pos ${zoomPos.toFixed(3)}  ×${scale.toFixed(2)}`;
+function targetScale() {
+  return Math.pow(ZOOM_FACTOR, zoomLevel);
 }
 
-function queueFrame() {
+function targetFocalPct() {
+  return -focalLevel * FOCAL_STEP_PCT;
+}
+
+function scheduleFrame() {
   if (!frameQueued) {
     frameQueued = true;
     requestAnimationFrame(applyFrame);
   }
 }
 
-function onOrientation(event) {
-  if (event.gamma == null) return;
-  gamma = event.gamma;
-  queueFrame();
+function applyFrame() {
+  frameQueued = false;
+  const tr = targetRotationDeg;
+  const ts = targetScale();
+  const tf = targetFocalPct();
+  currentRotationDeg += (tr - currentRotationDeg) * LERP;
+  currentScale += (ts - currentScale) * LERP;
+  currentFocalPct += (tf - currentFocalPct) * LERP;
+
+  wheel.style.transform =
+    `scale(${currentScale.toFixed(3)})` +
+    ` rotate(${currentRotationDeg.toFixed(2)}deg)` +
+    ` translate(0, ${currentFocalPct.toFixed(2)}%)`;
+
+  readout.textContent =
+    `θ ${targetRotationDeg.toFixed(0)}°  ×${currentScale.toFixed(2)}  zoom ${zoomLevel}  focal ${focalLevel}`;
+
+  if (
+    Math.abs(tr - currentRotationDeg) > 0.05 ||
+    Math.abs(ts - currentScale) > 0.005 ||
+    Math.abs(tf - currentFocalPct) > 0.02
+  ) {
+    scheduleFrame();
+  }
 }
+
+// Peak-detects a motion segment on a signed signal. A flick is committed only
+// when the segment ends. A newly-ended segment counts as a "reset" (and is
+// discarded) if the previous flick was opposite-direction, ended within
+// RESET_WINDOW_MS, and had a bigger peak.
+class FlickDetector {
+  constructor(threshold) {
+    this.threshold = threshold;
+    this.endThreshold = threshold * HYSTERESIS;
+    this.inMotion = false;
+    this.curDir = 0;
+    this.curPeak = 0;
+    this.prevDir = 0;
+    this.prevPeak = 0;
+    this.prevEndTs = 0;
+  }
+
+  update(signal, now) {
+    const abs = Math.abs(signal);
+    const dir = signal >= 0 ? 1 : -1;
+
+    if (!this.inMotion) {
+      if (abs > this.threshold) {
+        this.inMotion = true;
+        this.curDir = dir;
+        this.curPeak = abs;
+      }
+      return 0;
+    }
+
+    // Reversal above the entry threshold — end the current segment, start a new one.
+    if (abs > this.threshold && dir !== this.curDir) {
+      const finished = { dir: this.curDir, peak: this.curPeak, ts: now };
+      const emit = this.finalize(finished);
+      this.curDir = dir;
+      this.curPeak = abs;
+      return emit;
+    }
+
+    if (abs < this.endThreshold) {
+      const finished = { dir: this.curDir, peak: this.curPeak, ts: now };
+      this.inMotion = false;
+      return this.finalize(finished);
+    }
+
+    if (dir === this.curDir && abs > this.curPeak) {
+      this.curPeak = abs;
+    }
+    return 0;
+  }
+
+  finalize(flick) {
+    const dtSince = flick.ts - this.prevEndTs;
+    const isReset =
+      this.prevDir !== 0 &&
+      flick.dir === -this.prevDir &&
+      dtSince < RESET_WINDOW_MS &&
+      flick.peak < this.prevPeak;
+
+    if (isReset) {
+      // Discarded. Leave `prev*` untouched so a subsequent motion is still
+      // compared against the same original primary.
+      return 0;
+    }
+
+    this.prevDir = flick.dir;
+    this.prevPeak = flick.peak;
+    this.prevEndTs = flick.ts;
+    return flick.dir;
+  }
+}
+
+const rollFlick = new FlickDetector(ROLL_RATE_THRESHOLD);
+const pitchFlick = new FlickDetector(PITCH_RATE_THRESHOLD);
+const zoomFlick = new FlickDetector(Z_ACCEL_THRESHOLD);
 
 function onMotion(event) {
-  const linear = event.acceleration;
-  const acc = linear && linear.z != null ? linear : event.accelerationIncludingGravity;
-  if (!acc || acc.z == null) return;
-
   const now = performance.now();
-  const dt = lastMotionTs ? Math.min(0.1, (now - lastMotionTs) / 1000) : 1 / 60;
-  lastMotionTs = now;
+  if (now < motionWarmupUntil) return;
 
-  zLowPass = zLowPass * (1 - HIGH_PASS) + acc.z * HIGH_PASS;
-  let az = acc.z - zLowPass;
-  if (Math.abs(az) < DEAD_Z) az = 0;
-  lastAz = az;
+  const rr = event.rotationRate;
+  if (rr) {
+    if (rr.gamma != null) {
+      // Roll rate → month rotation. Sign chosen so twisting the top of the
+      // device to the right (clockwise from user POV) advances one month.
+      const d = rollFlick.update(rr.gamma, now);
+      if (d !== 0) targetRotationDeg += d * ROTATION_STEP_DEG;
+    }
+    if (rr.beta != null) {
+      // Pitch rate → focal ring. Tilting the top away from face = negative
+      // pitch rate on iOS = focal moves inward (level decreases).
+      const d = pitchFlick.update(rr.beta, now);
+      if (d !== 0) {
+        focalLevel = clamp(focalLevel + d, FOCAL_MIN_LEVEL, FOCAL_MAX_LEVEL);
+      }
+    }
+  }
 
-  zoomVel = zoomVel * VEL_DAMP + az * dt;
-  zoomPos = clamp(zoomPos * POS_DAMP + zoomVel * dt, -POS_LIMIT, POS_LIMIT);
-  queueFrame();
+  const acc = event.acceleration || event.accelerationIncludingGravity;
+  if (acc && acc.z != null) {
+    // +z acceleration = phone thrust toward face (screen normal points at user).
+    const d = zoomFlick.update(acc.z, now);
+    if (d !== 0) {
+      zoomLevel = clamp(zoomLevel + d, ZOOM_MIN_LEVEL, ZOOM_MAX_LEVEL);
+    }
+  }
+
+  scheduleFrame();
 }
 
-async function requestPermissions() {
-  const needOrient =
-    typeof DeviceOrientationEvent !== 'undefined' &&
-    typeof DeviceOrientationEvent.requestPermission === 'function';
-  const needMotion =
+async function requestMotionPermission() {
+  if (
     typeof DeviceMotionEvent !== 'undefined' &&
-    typeof DeviceMotionEvent.requestPermission === 'function';
-
-  const orientPromise = needOrient
-    ? DeviceOrientationEvent.requestPermission()
-    : Promise.resolve('granted');
-  const motionPromise = needMotion
-    ? DeviceMotionEvent.requestPermission()
-    : Promise.resolve('granted');
-
-  const [orientState, motionState] = await Promise.all([orientPromise, motionPromise]);
-  return { orientState, motionState };
+    typeof DeviceMotionEvent.requestPermission === 'function'
+  ) {
+    return DeviceMotionEvent.requestPermission();
+  }
+  return 'granted';
 }
 
 async function activate() {
   activateBtn.disabled = true;
   landingMsg.textContent = '';
   try {
-    const { orientState, motionState } = await requestPermissions();
-    const orientOk = orientState === 'granted';
-    const motionOk = motionState === 'granted';
-
-    if (!orientOk && !motionOk) {
-      landingMsg.textContent = 'Motion permissions denied. Enable Motion & Orientation in Safari settings and reload.';
+    const state = await requestMotionPermission();
+    if (state !== 'granted') {
+      landingMsg.textContent = 'Motion permission denied. Enable Motion & Orientation in Safari settings and reload.';
       activateBtn.disabled = false;
       return;
     }
 
-    if (orientOk) window.addEventListener('deviceorientation', onOrientation);
-    if (motionOk) window.addEventListener('devicemotion', onMotion);
+    motionWarmupUntil = performance.now() + WARMUP_MS;
+    window.addEventListener('devicemotion', onMotion);
 
     document.body.classList.add('active');
     readout.hidden = false;
+    scheduleFrame();
   } catch (err) {
     landingMsg.textContent = `Error: ${err.message || err}`;
     activateBtn.disabled = false;
