@@ -35,6 +35,8 @@ const ROLL_RATE_THRESHOLD = 90;    // deg/s
 const Z_ACCEL_THRESHOLD = 2.5;     // m/s²
 const HYSTERESIS = 0.35;
 const RESET_WINDOW_MS = 800;
+const SETTLE_MS = 400;              // swallow ringing after a return motion
+const SAME_DIR_REFRACTORY_MS = 300; // swallow same-direction mechanical rebound
 
 const ZOOM_FACTOR = 1.5;
 const ZOOM_MIN_LEVEL = -3;
@@ -88,6 +90,7 @@ class FlickDetector {
     this.prevDir = 0;
     this.prevPeak = 0;
     this.prevEndTs = 0;
+    this.settleUntil = 0;
   }
 
   update(signal, now) {
@@ -125,12 +128,25 @@ class FlickDetector {
 
   finalize(flick) {
     const dtSince = flick.ts - this.prevEndTs;
-    const isReset =
-      this.prevDir !== 0 &&
-      flick.dir === -this.prevDir &&
-      dtSince < RESET_WINDOW_MS;
 
-    if (isReset) return 0;
+    // Still ringing after a swallowed return motion — keep swallowing, and
+    // extend the window while the oscillation continues.
+    if (flick.ts < this.settleUntil) {
+      this.settleUntil = flick.ts + SETTLE_MS;
+      return 0;
+    }
+
+    // Return motion (wrist reset / braking phase of a lunge).
+    if (this.prevDir !== 0 && flick.dir === -this.prevDir && dtSince < RESET_WINDOW_MS) {
+      this.settleUntil = flick.ts + SETTLE_MS;
+      return 0;
+    }
+
+    // Mechanical rebound in the same direction as the committed flick —
+    // a human can't intentionally repeat a flick this fast.
+    if (this.prevDir !== 0 && flick.dir === this.prevDir && dtSince < SAME_DIR_REFRACTORY_MS) {
+      return 0;
+    }
 
     this.prevDir = flick.dir;
     this.prevPeak = flick.peak;
