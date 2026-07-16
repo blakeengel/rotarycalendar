@@ -267,7 +267,7 @@ const SCALE_MIN = Math.pow(ZOOM_FACTOR, ZOOM_MIN_LEVEL);
 const SCALE_MAX = Math.pow(ZOOM_FACTOR, ZOOM_MAX_LEVEL);
 
 function anchorToTopPx() {
-  return window.innerHeight * 0.95;
+  return window.innerHeight * 0.5;
 }
 
 function panMaxFor(scale) {
