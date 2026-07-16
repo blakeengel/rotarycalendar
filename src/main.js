@@ -7,7 +7,7 @@ const connectBtn = document.getElementById('connect');
 // OAuth client ID for live Google Calendar sync (client IDs are public
 // identifiers, safe to commit). Empty string disables the Connect button and
 // the app falls back to the baked events.json snapshot.
-const GOOGLE_CLIENT_ID = '';
+const GOOGLE_CLIENT_ID = '971677339251-o2a19jicqkfnd61got9fklp80qh43gc3.apps.googleusercontent.com';
 const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 
 let calendarSvg = null;
