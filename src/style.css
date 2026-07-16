@@ -63,6 +63,21 @@ body.active #anchor {
   pointer-events: none;
 }
 
+/* Hour-ring level of detail, driven by data-lod on #wheel (set from the
+   zoom level in main.js). Rings fade rather than pop. */
+#wheel .hour-ring {
+  transition: opacity 400ms ease;
+}
+
+#wheel[data-lod="0"] .hour-ring.h1,
+#wheel[data-lod="0"] .hour-ring.h3 {
+  opacity: 0;
+}
+
+#wheel[data-lod="1"] .hour-ring.h1 {
+  opacity: 0;
+}
+
 #landing {
   position: fixed;
   inset: 0;

@@ -3,6 +3,20 @@ const landingMsg = document.getElementById('landing-msg');
 const wheel = document.getElementById('wheel');
 const readout = document.getElementById('readout');
 
+// Swap the <img> for the SVG's real DOM so page CSS and JS can reach inside
+// it — needed for hour-ring level-of-detail now, and for drawing calendar
+// events into the dial later. The <img> stays as the fallback if this fails.
+fetch('./rotary-calendar.svg')
+  .then((r) => r.text())
+  .then((txt) => {
+    const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+    const svg = doc.documentElement;
+    if (svg.nodeName !== 'svg') return;
+    svg.setAttribute('id', 'calendar');
+    document.getElementById('calendar').replaceWith(svg);
+  })
+  .catch(() => {});
+
 // SVG day-lines start at 6 o'clock (rotate 0 = pointing down) and advance
 // clockwise through the year. So today's day-line sits at (180° + yearFraction
 // * 360°) measured clockwise from screen top. Rotating the wheel by the
@@ -54,10 +68,10 @@ const Z_IDLE_LIMIT = Z_ACCEL_THRESHOLD * 0.5;        // only update baseline in 
 
 let zBaseline = 0;
 
-// Orbit-ring spacing in the SVG's user units (concentric circles are ~17.85
-// apart on a 1200-unit viewBox); converted to px at the current scale to step
-// exactly one ring per tilt flick.
-const RING_SPACING_SVG = 17.85;
+// Hour-ring spacing in the SVG's user units (24 rings, 15 units apart on a
+// 1200-unit viewBox); converted to px at the current scale so a tilt flick
+// steps exactly one hour.
+const RING_SPACING_SVG = 15;
 const SVG_SIZE = 1200;
 const CROSS_SUPPRESS_MS = 500;
 const TOUCH_SUPPRESS_MS = 500;
@@ -75,6 +89,12 @@ function panMaxFor(scale) {
 
 function ringStepPx(scale) {
   return (RING_SPACING_SVG / SVG_SIZE) * wheel.offsetWidth * scale;
+}
+
+// Zoom-driven level of detail for the hour rings: zoomed out shows only the
+// 6-hour rings, one step in adds the 3-hour rings, two or more shows all 24.
+function updateLod() {
+  wheel.dataset.lod = String(clamp(zoomLevel, 0, 2));
 }
 
 function clamp(v, lo, hi) {
@@ -249,6 +269,7 @@ function onMotion(event) {
       // Rescale the pan so the ring band in view stays put, then re-clamp —
       // zooming out shrinks the traversable range and can pull the pan in.
       targetPan = clamp(targetPan * Math.pow(ZOOM_FACTOR, d), 0, panMaxFor(targetScale));
+      updateLod();
       suppressOthers(zoomFlick, now);
       scheduleFrame();
     }
@@ -363,6 +384,7 @@ function onPointerMove(e) {
       ZOOM_MAX_LEVEL
     );
     targetPan = clamp(pinchStartPan * ratio, 0, panMaxFor(targetScale));
+    updateLod();
     scheduleFrame();
   }
 }
@@ -387,6 +409,7 @@ activateBtn.addEventListener('click', activate);
 
 // Apply the initial rotation immediately so today's day sits at the top even
 // in the landing state, behind the blur.
+updateLod();
 scheduleFrame();
 
 if ('serviceWorker' in navigator) {

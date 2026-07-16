@@ -56,6 +56,9 @@
       .cum-day-num { display: none; }
       .wedge-even { fill: #1a1a1a; }
       .wedge-odd  { fill: #363636; }
+      .hour-ring { fill: none; stroke: #9a9a9a; stroke-width: 0.7; }
+      .hour-ring.h3 { stroke: #b5b5b5; stroke-width: 1.0; }
+      .hour-ring.h6 { stroke: #e0e0e0; stroke-width: 1.5; }
     </style>
     <path
        id="text-path"
@@ -5514,46 +5517,30 @@
      cx="600"
      cy="600"
      r="105.52959" />
-  <circle
-     style="fill:none;fill-opacity:1;stroke:#d9d9d9;stroke-width:0.96;stroke-opacity:1"
-     id="path776"
-     cx="600"
-     cy="600"
-     r="431.97025" />
-  <circle
-     style="fill:none;fill-opacity:1;stroke:#d9d9d9;stroke-width:0.96;stroke-opacity:1"
-     id="path777"
-     cx="600"
-     cy="600"
-     r="414.1264" />
-  <circle
-     style="fill:none;fill-opacity:1;stroke:#d9d9d9;stroke-width:0.96;stroke-opacity:1"
-     id="path778"
-     cx="600"
-     cy="600"
-     r="394.79553" />
-  <circle
-     style="fill:none;fill-opacity:1;stroke:#d9d9d9;stroke-width:0.96;stroke-opacity:1"
-     id="path779"
-     cx="600"
-     cy="600"
-     r="373.97769" />
-  <circle
-     style="fill:none;fill-opacity:1;stroke:#d9d9d9;stroke-width:0.96446;stroke-opacity:1"
-     id="path780"
-     cx="600"
-     cy="600"
-     r="354.80054" />
-  <use
-     x="0"
-     y="0"
-     xlink:href="#path780"
-     id="use781"
-     transform="matrix(0.95393054,0,0,0.95393054,27.641677,27.641677)" />
-  <use
-     x="0"
-     y="0"
-     xlink:href="#path780"
-     id="use782"
-     transform="matrix(0.90252515,0,0,0.90252515,58.484913,58.484913)" />
+  <g id="hour-rings" transform="translate(600, 600)">
+    <circle class="hour-ring h1" data-hour="1"  cx="0" cy="0" r="105" />
+    <circle class="hour-ring h1" data-hour="2"  cx="0" cy="0" r="120" />
+    <circle class="hour-ring h3" data-hour="3"  cx="0" cy="0" r="135" />
+    <circle class="hour-ring h1" data-hour="4"  cx="0" cy="0" r="150" />
+    <circle class="hour-ring h1" data-hour="5"  cx="0" cy="0" r="165" />
+    <circle class="hour-ring h6" data-hour="6"  cx="0" cy="0" r="180" />
+    <circle class="hour-ring h1" data-hour="7"  cx="0" cy="0" r="195" />
+    <circle class="hour-ring h1" data-hour="8"  cx="0" cy="0" r="210" />
+    <circle class="hour-ring h3" data-hour="9"  cx="0" cy="0" r="225" />
+    <circle class="hour-ring h1" data-hour="10" cx="0" cy="0" r="240" />
+    <circle class="hour-ring h1" data-hour="11" cx="0" cy="0" r="255" />
+    <circle class="hour-ring h6" data-hour="12" cx="0" cy="0" r="270" />
+    <circle class="hour-ring h1" data-hour="13" cx="0" cy="0" r="285" />
+    <circle class="hour-ring h1" data-hour="14" cx="0" cy="0" r="300" />
+    <circle class="hour-ring h3" data-hour="15" cx="0" cy="0" r="315" />
+    <circle class="hour-ring h1" data-hour="16" cx="0" cy="0" r="330" />
+    <circle class="hour-ring h1" data-hour="17" cx="0" cy="0" r="345" />
+    <circle class="hour-ring h6" data-hour="18" cx="0" cy="0" r="360" />
+    <circle class="hour-ring h1" data-hour="19" cx="0" cy="0" r="375" />
+    <circle class="hour-ring h1" data-hour="20" cx="0" cy="0" r="390" />
+    <circle class="hour-ring h3" data-hour="21" cx="0" cy="0" r="405" />
+    <circle class="hour-ring h1" data-hour="22" cx="0" cy="0" r="420" />
+    <circle class="hour-ring h1" data-hour="23" cx="0" cy="0" r="435" />
+    <circle class="hour-ring h6" data-hour="24" cx="0" cy="0" r="450" />
+  </g>
 </svg>
