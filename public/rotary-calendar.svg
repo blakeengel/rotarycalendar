@@ -79,7 +79,7 @@
   <g
      id="calendar-layout"
      transform="translate(600, 600)">
-    <g id="month-wedges">
+    <g id="month-wedges" transform="rotate(180)">
       <path class="wedge-even" d="M 0 0 L 0.000 -450.000 A 450 450 0 0 1 228.337 -387.766 Z" />
       <path class="wedge-odd"  d="M 0 0 L 228.337 -387.766 A 450 450 0 0 1 385.792 -231.657 Z" />
       <path class="wedge-even" d="M 0 0 L 385.792 -231.657 A 450 450 0 0 1 449.983 -3.863 Z" />

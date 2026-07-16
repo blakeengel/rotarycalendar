@@ -78,6 +78,13 @@ body.active #anchor {
   opacity: 0;
 }
 
+#wheel .event-line {
+  stroke: #ff6b4a;
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
 #landing {
   position: fixed;
   inset: 0;

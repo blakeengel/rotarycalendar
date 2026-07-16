@@ -3,9 +3,51 @@ const landingMsg = document.getElementById('landing-msg');
 const wheel = document.getElementById('wheel');
 const readout = document.getElementById('readout');
 
+// ---- Event rendering. Angle encodes the date (day 1 of the year at the
+// bottom, advancing clockwise, one day per 360/366°, matching the SVG's day
+// lines); radius encodes time of day (15 units per hour from r=90 at
+// midnight to r=450 at the following midnight, matching the hour rings).
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const HOUR_R0 = 90;
+const HOUR_R_PER_H = 15;
+const DAY_ANGLE = 360 / 366;
+
+function dayOfYear(d) {
+  const start = new Date(d.getFullYear(), 0, 1);
+  return Math.floor((d - start) / 86400000) + 1;
+}
+
+function drawEvents(svg, events) {
+  const g = document.createElementNS(SVG_NS, 'g');
+  g.setAttribute('id', 'event-lines');
+  g.setAttribute('transform', 'translate(600, 600)');
+  for (const ev of events) {
+    const start = new Date(ev.start);
+    const end = new Date(ev.end);
+    if (isNaN(start) || isNaN(end)) continue;
+    const day = dayOfYear(start);
+    const t0 = start.getHours() + start.getMinutes() / 60;
+    const sameDay = start.toDateString() === end.toDateString();
+    const t1 = sameDay ? end.getHours() + end.getMinutes() / 60 : 24;
+    const ang = ((180 + (day - 0.5) * DAY_ANGLE) * Math.PI) / 180;
+    const r0 = HOUR_R0 + t0 * HOUR_R_PER_H;
+    // Enforce a minimum radial length so short meetings stay visible.
+    const r1 = Math.max(HOUR_R0 + t1 * HOUR_R_PER_H, r0 + 4);
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', (r0 * Math.sin(ang)).toFixed(2));
+    line.setAttribute('y1', (-r0 * Math.cos(ang)).toFixed(2));
+    line.setAttribute('x2', (r1 * Math.sin(ang)).toFixed(2));
+    line.setAttribute('y2', (-r1 * Math.cos(ang)).toFixed(2));
+    line.setAttribute('class', 'event-line');
+    g.appendChild(line);
+  }
+  svg.appendChild(g);
+}
+
 // Swap the <img> for the SVG's real DOM so page CSS and JS can reach inside
-// it — needed for hour-ring level-of-detail now, and for drawing calendar
-// events into the dial later. The <img> stays as the fallback if this fails.
+// it — needed for hour-ring level-of-detail and for drawing calendar events
+// into the dial. The <img> stays as the fallback if this fails.
 fetch('./rotary-calendar.svg')
   .then((r) => r.text())
   .then((txt) => {
@@ -14,6 +56,9 @@ fetch('./rotary-calendar.svg')
     if (svg.nodeName !== 'svg') return;
     svg.setAttribute('id', 'calendar');
     document.getElementById('calendar').replaceWith(svg);
+    return fetch('./events.json')
+      .then((r) => r.json())
+      .then((data) => drawEvents(svg, data.events || []));
   })
   .catch(() => {});
 

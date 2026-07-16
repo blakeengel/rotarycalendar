@@ -9,6 +9,7 @@
     "preview": "vite preview --host"
   },
   "devDependencies": {
+    "playwright": "^1.61.1",
     "vite": "^5.4.10"
   }
 }
