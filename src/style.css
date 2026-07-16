@@ -85,6 +85,36 @@ body.active #anchor {
   opacity: 0.85;
 }
 
+#connect {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 3;
+  padding: 10px 16px;
+  border: 1px solid #3a3a3a;
+  background: rgba(20, 20, 20, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: var(--fg);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+body.active #connect:not([hidden]) {
+  opacity: 0.85;
+  pointer-events: auto;
+}
+
+#connect:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 #landing {
   position: fixed;
   inset: 0;

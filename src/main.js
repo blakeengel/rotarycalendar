@@ -2,6 +2,15 @@ const activateBtn = document.getElementById('activate');
 const landingMsg = document.getElementById('landing-msg');
 const wheel = document.getElementById('wheel');
 const readout = document.getElementById('readout');
+const connectBtn = document.getElementById('connect');
+
+// OAuth client ID for live Google Calendar sync (client IDs are public
+// identifiers, safe to commit). Empty string disables the Connect button and
+// the app falls back to the baked events.json snapshot.
+const GOOGLE_CLIENT_ID = '';
+const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+
+let calendarSvg = null;
 
 // ---- Event rendering. Angle encodes the date (day 1 of the year at the
 // bottom, advancing clockwise, one day per 360/366°, matching the SVG's day
@@ -19,6 +28,8 @@ function dayOfYear(d) {
 }
 
 function drawEvents(svg, events) {
+  const prev = svg.querySelector('#event-lines');
+  if (prev) prev.remove();
   const g = document.createElementNS(SVG_NS, 'g');
   g.setAttribute('id', 'event-lines');
   g.setAttribute('transform', 'translate(600, 600)');
@@ -56,11 +67,87 @@ fetch('./rotary-calendar.svg')
     if (svg.nodeName !== 'svg') return;
     svg.setAttribute('id', 'calendar');
     document.getElementById('calendar').replaceWith(svg);
+    calendarSvg = svg;
     return fetch('./events.json')
       .then((r) => r.json())
       .then((data) => drawEvents(svg, data.events || []));
   })
   .catch(() => {});
+
+// ---- Live Google Calendar sync (Google Identity Services token flow).
+// Token lives in memory only; each session reconnects with a tap.
+
+async function gcalFetch(token, url) {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Calendar API ${res.status}`);
+  return res.json();
+}
+
+async function loadLiveEvents(token) {
+  const year = new Date().getFullYear();
+  const timeMin = encodeURIComponent(`${year}-01-01T00:00:00Z`);
+  const timeMax = encodeURIComponent(`${year + 1}-01-08T00:00:00Z`);
+
+  const calList = await gcalFetch(
+    token,
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList'
+  );
+
+  const events = [];
+  for (const cal of calList.items || []) {
+    let pageToken = '';
+    do {
+      const url =
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events` +
+        `?singleEvents=true&maxResults=2500&timeMin=${timeMin}&timeMax=${timeMax}` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+      const page = await gcalFetch(token, url);
+      for (const ev of page.items || []) {
+        if (ev.status === 'cancelled') continue;
+        if (!ev.start || !ev.start.dateTime || !ev.end || !ev.end.dateTime) continue; // skip all-day
+        events.push({ start: ev.start.dateTime, end: ev.end.dateTime });
+      }
+      pageToken = page.nextPageToken || '';
+    } while (pageToken);
+  }
+  return events;
+}
+
+function initConnect() {
+  if (!GOOGLE_CLIENT_ID) return;
+  connectBtn.hidden = false;
+  connectBtn.addEventListener('click', () => {
+    if (typeof google === 'undefined' || !google.accounts) {
+      connectBtn.textContent = 'Google script blocked — retry';
+      return;
+    }
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting…';
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GCAL_SCOPE,
+      callback: async (resp) => {
+        if (resp.error || !resp.access_token) {
+          connectBtn.disabled = false;
+          connectBtn.textContent = 'Connect Calendar';
+          return;
+        }
+        try {
+          const events = await loadLiveEvents(resp.access_token);
+          if (calendarSvg) drawEvents(calendarSvg, events);
+          connectBtn.textContent = `Synced ${events.length} events`;
+          connectBtn.disabled = false;
+        } catch (err) {
+          connectBtn.textContent = `Sync failed — retry`;
+          connectBtn.disabled = false;
+        }
+      },
+    });
+    client.requestAccessToken();
+  });
+}
+
+initConnect();
 
 // SVG day-lines start at 6 o'clock (rotate 0 = pointing down) and advance
 // clockwise through the year. So today's day-line sits at (180° + yearFraction

@@ -1,4 +1,4 @@
-const CACHE = 'rotary-calendar-v20';
+const CACHE = 'rotary-calendar-v21';
 const ASSETS = ['./', './index.html', './rotary-calendar.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -20,6 +20,9 @@ self.addEventListener('activate', (event) => {
 // the classic "stale cached HTML references dead JS chunk" trap.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // Same-origin only: never cache Google API responses (personal calendar
+  // data) or the GIS script.
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {
