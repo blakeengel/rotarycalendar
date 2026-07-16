@@ -59,6 +59,8 @@ function drawEvents(svg, events) {
 // Swap the <img> for the SVG's real DOM so page CSS and JS can reach inside
 // it — needed for hour-ring level-of-detail and for drawing calendar events
 // into the dial. The <img> stays as the fallback if this fails.
+// Events render only from a live sync of the user's own connected account —
+// there is deliberately no bundled event data.
 fetch('./rotary-calendar.svg')
   .then((r) => r.text())
   .then((txt) => {
@@ -68,9 +70,6 @@ fetch('./rotary-calendar.svg')
     svg.setAttribute('id', 'calendar');
     document.getElementById('calendar').replaceWith(svg);
     calendarSvg = svg;
-    return fetch('./events.json')
-      .then((r) => r.json())
-      .then((data) => drawEvents(svg, data.events || []));
   })
   .catch(() => {});
 
