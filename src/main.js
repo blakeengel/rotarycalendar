@@ -59,8 +59,8 @@ function drawEvents(svg, events) {
 // Swap the <img> for the SVG's real DOM so page CSS and JS can reach inside
 // it — needed for hour-ring level-of-detail and for drawing calendar events
 // into the dial. The <img> stays as the fallback if this fails.
-// Events render only from a live sync of the user's own connected account —
-// there is deliberately no bundled event data.
+// Events render only from the user's own connected account — live sync or
+// the local cache of the last sync. There is deliberately no bundled data.
 fetch('./rotary-calendar.svg')
   .then((r) => r.text())
   .then((txt) => {
@@ -70,6 +70,9 @@ fetch('./rotary-calendar.svg')
     svg.setAttribute('id', 'calendar');
     document.getElementById('calendar').replaceWith(svg);
     calendarSvg = svg;
+    // Instant dial from the last sync; a background refresh may redraw it.
+    const cache = readCachedEvents();
+    if (cache) drawEvents(svg, cache.events);
   })
   .catch(() => {});
 
@@ -83,6 +86,30 @@ fetch('./rotary-calendar.svg')
 
 const CONNECTED_KEY = 'gcalConnected';
 const TOKEN_KEY = 'gcalToken';
+const HINT_KEY = 'gcalHint';
+const EVENTS_KEY = 'gcalEvents';
+// Cache younger than this skips the network entirely on a visit; older
+// triggers a refresh (silent when the token is fresh, self-closing popup
+// re-auth otherwise).
+const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function readCachedEvents() {
+  try {
+    const raw = localStorage.getItem(EVENTS_KEY);
+    if (!raw) return null;
+    const { at, events } = JSON.parse(raw);
+    if (!Array.isArray(events)) return null;
+    return { at: at || 0, events };
+  } catch {
+    return null;
+  }
+}
+
+function storeCachedEvents(events) {
+  try {
+    localStorage.setItem(EVENTS_KEY, JSON.stringify({ at: Date.now(), events }));
+  } catch {}
+}
 
 function readStoredToken() {
   try {
@@ -121,6 +148,15 @@ async function loadLiveEvents(token) {
     'https://www.googleapis.com/calendar/v3/users/me/calendarList'
   );
 
+  // The primary calendar's id is the account email. Remember it so later
+  // token requests can pass it as a login hint — with multiple Google
+  // accounts signed in, the hint lets the popup skip the account chooser
+  // and close itself.
+  const primary = (calList.items || []).find((c) => c.primary);
+  if (primary && typeof primary.id === 'string' && primary.id.includes('@')) {
+    try { localStorage.setItem(HINT_KEY, primary.id); } catch {}
+  }
+
   const events = [];
   for (const cal of calList.items || []) {
     let pageToken = '';
@@ -144,6 +180,7 @@ async function loadLiveEvents(token) {
 async function syncWithToken(token) {
   const events = await loadLiveEvents(token);
   if (calendarSvg) drawEvents(calendarSvg, events);
+  storeCachedEvents(events);
   localStorage.setItem(CONNECTED_KEY, '1');
   return events.length;
 }
@@ -164,6 +201,7 @@ function requestTokenInteractive() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: GCAL_SCOPE,
+    hint: localStorage.getItem(HINT_KEY) || undefined,
     callback: async (resp) => {
       if (resp.error || !resp.access_token) {
         showConnectButton();
@@ -187,15 +225,23 @@ function requestTokenInteractive() {
 function maybeSyncCalendar() {
   if (!GOOGLE_CLIENT_ID) return;
   if (!localStorage.getItem(CONNECTED_KEY)) return; // first run: onboarding button instead
+
+  const cache = readCachedEvents();
+  const cacheFresh = cache && Date.now() - cache.at < CACHE_MAX_AGE_MS;
   const stored = readStoredToken();
+
   if (stored) {
+    // Token still valid — refresh in the background, no UI either way.
     syncWithToken(stored).catch(() => {
       localStorage.removeItem(TOKEN_KEY);
-      showConnectButton('Reconnect Google Calendar');
+      if (!cache) showConnectButton('Reconnect Google Calendar');
     });
-  } else {
+  } else if (!cacheFresh) {
+    // Stale token and stale (or no) cache — re-auth inside this tap gesture;
+    // the login hint lets Google's popup close itself.
     requestTokenInteractive();
   }
+  // Stale token but fresh cache: skip the network, the cached dial stands.
 }
 
 connectBtn.addEventListener('click', () => {
