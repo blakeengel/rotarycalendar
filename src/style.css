@@ -87,18 +87,20 @@ body.active #anchor {
 
 #connect {
   position: fixed;
-  right: max(14px, env(safe-area-inset-right));
-  bottom: max(14px, env(safe-area-inset-bottom));
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
   z-index: 3;
-  padding: 10px 16px;
+  padding: 16px 24px;
   border: 1px solid #3a3a3a;
-  background: rgba(20, 20, 20, 0.75);
+  background: rgba(20, 20, 20, 0.8);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: var(--fg);
   border-radius: 999px;
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -106,12 +108,12 @@ body.active #anchor {
 }
 
 body.active #connect:not([hidden]) {
-  opacity: 0.85;
+  opacity: 0.95;
   pointer-events: auto;
 }
 
 #connect:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   pointer-events: none;
 }
 

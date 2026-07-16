@@ -75,7 +75,36 @@ fetch('./rotary-calendar.svg')
   .catch(() => {});
 
 // ---- Live Google Calendar sync (Google Identity Services token flow).
-// Token lives in memory only; each session reconnects with a tap.
+//
+// First visit: after motion activation, a centered Connect button runs the
+// OAuth consent once and remembers it (localStorage flag). Later visits ride
+// along on the Activate tap: a stored token (~1h lifetime) is reused
+// silently; when stale, requestAccessToken is called inside the same tap
+// gesture — with consent already granted, Google's popup self-closes.
+
+const CONNECTED_KEY = 'gcalConnected';
+const TOKEN_KEY = 'gcalToken';
+
+function readStoredToken() {
+  try {
+    const raw = localStorage.getItem(TOKEN_KEY);
+    if (!raw) return null;
+    const { t, exp } = JSON.parse(raw);
+    // 60s safety margin so we don't start a paginated fetch on a dying token.
+    return t && exp && Date.now() < exp - 60000 ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeToken(token, expiresInSec) {
+  try {
+    localStorage.setItem(
+      TOKEN_KEY,
+      JSON.stringify({ t: token, exp: Date.now() + expiresInSec * 1000 })
+    );
+  } catch {}
+}
 
 async function gcalFetch(token, url) {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -113,41 +142,68 @@ async function loadLiveEvents(token) {
   return events;
 }
 
-function initConnect() {
-  if (!GOOGLE_CLIENT_ID) return;
-  connectBtn.hidden = false;
-  connectBtn.addEventListener('click', () => {
-    if (typeof google === 'undefined' || !google.accounts) {
-      connectBtn.textContent = 'Google script blocked — retry';
-      return;
-    }
-    connectBtn.disabled = true;
-    connectBtn.textContent = 'Connecting…';
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GCAL_SCOPE,
-      callback: async (resp) => {
-        if (resp.error || !resp.access_token) {
-          connectBtn.disabled = false;
-          connectBtn.textContent = 'Connect Calendar';
-          return;
-        }
-        try {
-          const events = await loadLiveEvents(resp.access_token);
-          if (calendarSvg) drawEvents(calendarSvg, events);
-          connectBtn.textContent = `Synced ${events.length} events`;
-          connectBtn.disabled = false;
-        } catch (err) {
-          connectBtn.textContent = `Sync failed — retry`;
-          connectBtn.disabled = false;
-        }
-      },
-    });
-    client.requestAccessToken();
-  });
+async function syncWithToken(token) {
+  const events = await loadLiveEvents(token);
+  if (calendarSvg) drawEvents(calendarSvg, events);
+  localStorage.setItem(CONNECTED_KEY, '1');
+  return events.length;
 }
 
-initConnect();
+function showConnectButton(label) {
+  connectBtn.textContent = label || 'Connect Google Calendar';
+  connectBtn.disabled = false;
+  connectBtn.hidden = false;
+}
+
+// Must be called from inside a user-gesture handler: opens Google's popup.
+// With prior consent the popup closes itself without user interaction.
+function requestTokenInteractive() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    showConnectButton('Google script blocked — tap to retry');
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GCAL_SCOPE,
+    callback: async (resp) => {
+      if (resp.error || !resp.access_token) {
+        showConnectButton();
+        return;
+      }
+      storeToken(resp.access_token, Number(resp.expires_in) || 3600);
+      try {
+        const n = await syncWithToken(resp.access_token);
+        connectBtn.textContent = `Synced ${n} events`;
+        setTimeout(() => { connectBtn.hidden = true; }, 1500);
+      } catch {
+        showConnectButton('Sync failed — tap to retry');
+      }
+    },
+  });
+  client.requestAccessToken();
+}
+
+// Rides on the Activate tap for returning users. Synchronous decision so the
+// popup path stays inside the gesture.
+function maybeSyncCalendar() {
+  if (!GOOGLE_CLIENT_ID) return;
+  if (!localStorage.getItem(CONNECTED_KEY)) return; // first run: onboarding button instead
+  const stored = readStoredToken();
+  if (stored) {
+    syncWithToken(stored).catch(() => {
+      localStorage.removeItem(TOKEN_KEY);
+      showConnectButton('Reconnect Google Calendar');
+    });
+  } else {
+    requestTokenInteractive();
+  }
+}
+
+connectBtn.addEventListener('click', () => {
+  connectBtn.disabled = true;
+  connectBtn.textContent = 'Connecting…';
+  requestTokenInteractive();
+});
 
 // SVG day-lines start at 6 o'clock (rotate 0 = pointing down) and advance
 // clockwise through the year. So today's day-line sits at (180° + yearFraction
@@ -443,6 +499,10 @@ function activate() {
     ? DeviceMotionEvent.requestPermission()
     : Promise.resolve('granted');
 
+  // Returning users: calendar sync shares this same tap gesture (a popup
+  // opened later, outside the gesture, would be blocked).
+  maybeSyncCalendar();
+
   // Guard against the prompt hanging so a stuck permission call doesn't
   // leave the button permanently disabled.
   const timeout = new Promise((_, reject) =>
@@ -460,6 +520,10 @@ function activate() {
       window.addEventListener('devicemotion', onMotion);
       document.body.classList.add('active');
       readout.hidden = false;
+      // First run: offer the one-time calendar connect over the revealed dial.
+      if (GOOGLE_CLIENT_ID && !localStorage.getItem(CONNECTED_KEY)) {
+        showConnectButton();
+      }
       scheduleFrame();
     })
     .catch((err) => {
